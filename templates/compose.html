@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post Buddy - Compose</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            font-family: 'Outfit', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        h1 {
+            margin-bottom: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 16px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 1rem;
+            resize: none;
+            box-sizing: border-box;
+            background: #fff;
+            transition: border-color 0.3s ease;
+            margin-bottom: 24px;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #0077b5;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 12px 32px;
+            background-color: #0077b5;
+            color: white;
+            border-radius: 50px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 119, 181, 0.3);
+            border: none;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background-color: #006097;
+            box-shadow: 0 6px 20px rgba(0, 119, 181, 0.4);
+            transform: translateY(-2px);
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            min-height: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="card">
+        <h1>Create Post</h1>
+        <div id="profile" style="margin:-12px 0 18px 0; font-size: 0.95rem; color:#444;"></div>
+
+        <form id="postForm">
+            <textarea name="text" placeholder="What do you want to talk about?" required>hey guyz,
+
+India is at a really interesting point right now. We’re holding on to our culture and values while moving fast with technology, startups, and digital innovation. From UPI to a growing creator and founder ecosystem, it honestly feels like India is building something meaningful for the future. 🇮🇳</textarea>
+            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                <button type="submit" class="btn-primary" id="submitBtn" style="flex:1;">Post Now</button>
+                <button type="button" class="btn-primary" id="scheduleBtn" style="flex:1; background:#111; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
+                    Schedule Post
+                </button>
+            </div>
+
+            <div style="margin-top:12px; text-align:left;">
+                <label style="font-size:12px; color:#666; display:block; margin-bottom:6px;">Schedule time</label>
+                <input id="scheduleTime" type="datetime-local"
+                       style="width:100%; padding:12px; border:1px solid #ddd; border-radius:12px; font-family:inherit; font-size:0.95rem; box-sizing:border-box;"
+                />
+                <div style="margin-top:6px; font-size:12px; color:#666;">
+                    This schedules on the server, so it can post even if your laptop is off.
+                </div>
+            </div>
+        </form>
+
+        <div id="status"></div>
+
+        <button onclick="logout()"
+            style="margin-top: 20px; background: transparent; border: none; color: #666; cursor: pointer; text-decoration: underline;">
+            Logout
+        </button>
+    </div>
+
+    <script>
+        // IndexedDB Logic (Shared)
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open("PostBuddyDB", 1);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    db.createObjectStore("session", { keyPath: "id" });
+                };
+                request.onerror = (event) => reject("IndexedDB error");
+                request.onsuccess = (event) => resolve(event.target.result);
+            });
+        }
+
+        async function getSession() {
+            try {
+                const db = await initDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction(["session"], "readonly");
+                    const store = transaction.objectStore("session");
+                    const request = store.get("linkedin_cookies");
+                    request.onsuccess = () => resolve(request.result?.data);
+                    request.onerror = () => reject("Error fetching session");
+                });
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function getProfileFromDB() {
+            try {
+                const db = await initDB();
+                return new Promise((resolve, reject) => {
+                    const transaction = db.transaction(["session"], "readonly");
+                    const store = transaction.objectStore("session");
+                    const request = store.get("linkedin_profile");
+                    request.onsuccess = () => resolve(request.result?.data || null);
+                    request.onerror = () => reject("Error fetching profile");
+                });
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function saveProfileToDB(profile) {
+            const db = await initDB();
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(["session"], "readwrite");
+                const store = transaction.objectStore("session");
+                const request = store.put({ id: "linkedin_profile", data: profile });
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject("Error saving profile");
+            });
+        }
+
+        function renderProfile(profile) {
+            const el = document.getElementById("profile");
+            if (!el) return;
+            const first = profile?.first_name || "";
+            const last = profile?.last_name || "";
+            const name = `${first} ${last}`.trim();
+            el.textContent = name ? `Connected as: ${name}` : "Connected as: (unknown)";
+        }
+
+        function requestClearLinkedInCookiesViaExtension(timeoutMs = 8000) {
+            return new Promise((resolve, reject) => {
+                const requestId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now());
+                let done = false;
+
+                const timer = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener("message", onMessage);
+                    reject(new Error("No response from extension while clearing cookies."));
+                }, timeoutMs);
+
+                function onMessage(event) {
+                    const data = event.data || {};
+                    if (data?.source !== "post-buddy-extension") return;
+                    if (data?.type !== "POST_BUDDY_CLEAR_LINKEDIN_COOKIES_RESULT") return;
+                    if (data?.requestId && data.requestId !== requestId) return;
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    window.removeEventListener("message", onMessage);
+                    if (!data.ok) reject(new Error(data.error || "Failed to clear LinkedIn cookies"));
+                    else resolve(data);
+                }
+
+                window.addEventListener("message", onMessage);
+                window.postMessage(
+                    { source: "post-buddy-page", type: "POST_BUDDY_CLEAR_LINKEDIN_COOKIES", requestId },
+                    "*"
+                );
+            });
+        }
+
+        function requestPostViaExtension(text, { visibility = "ANYONE", queryId } = {}, timeoutMs = 20000) {
+            return new Promise((resolve, reject) => {
+                const requestId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now());
+                let done = false;
+
+                const timer = setTimeout(() => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener("message", onMessage);
+                    reject(new Error("No response from extension while posting. Ensure extension is installed + LinkedIn tab is logged in."));
+                }, timeoutMs);
+
+                function onMessage(event) {
+                    const data = event.data || {};
+                    if (data?.source !== "post-buddy-extension") return;
+                    if (data?.type !== "LINKEDIN_CREATE_POST_RESPONSE") return;
+                    if (data?.requestId && data.requestId !== requestId) return;
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    window.removeEventListener("message", onMessage);
+                    if (!data.ok) reject(new Error(data.error || "Failed to create post"));
+                    else resolve(data);
+                }
+
+                window.addEventListener("message", onMessage);
+                window.postMessage(
+                    { type: "LINKEDIN_CREATE_POST_REQUEST", requestId, text, visibility, queryId },
+                    "*"
+                );
+            });
+        }
+
+        async function logout() {
+            try {
+                const db = await initDB();
+                const transaction = db.transaction(["session"], "readwrite");
+                const store = transaction.objectStore("session");
+                store.clear();
+                // Best-effort: clear any server-side scheduled posts
+                try { await fetch("/clear-scheduled", { method: "POST" }); } catch (e) { /* ignore */ }
+                // Best-effort: also clear linkedin.com cookies in this Chrome profile via extension.
+                try { await requestClearLinkedInCookiesViaExtension(); } catch (e) { /* ignore */ }
+                window.location.href = "/";
+            } catch (e) {
+                console.error("Logout failed", e);
+                window.location.href = "/";
+            }
+        }
+
+        // On Load: Check if session exists
+        window.addEventListener('load', async () => {
+            const cookies = await getSession();
+            if (!cookies) {
+                window.location.href = "/";
+                return;
+            }
+
+            // Show which LinkedIn user this session belongs to (helps avoid posting from wrong account)
+            const existingProfile = await getProfileFromDB();
+            if (existingProfile) {
+                renderProfile(existingProfile);
+            } else {
+                try {
+                    const resp = await fetch("/get-profile", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ cookies }),
+                    });
+                    const data = await resp.json();
+                    if (resp.ok && data?.status === "success" && data?.profile) {
+                        await saveProfileToDB(data.profile);
+                        renderProfile(data.profile);
+                    } else {
+                        renderProfile(null);
+                    }
+                } catch {
+                    renderProfile(null);
+                }
+            }
+        });
+
+        document.getElementById('postForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const btn = document.getElementById('submitBtn');
+            const statusDiv = document.getElementById('status');
+            const formData = new FormData(this);
+            const text = formData.get('text');
+
+            btn.disabled = true;
+            btn.textContent = 'Posting...';
+            statusDiv.textContent = '';
+
+            try {
+                const result = await requestPostViaExtension(String(text || "").trim());
+                statusDiv.innerHTML = result?.post_url
+                    ? `<span style="color: green">✅ Posted: <a href="${result.post_url}" target="_blank" rel="noopener noreferrer">${result.post_url}</a></span>`
+                    : `<span style="color: green">✅ Posted successfully.</span>`;
+                this.reset();
+            } catch (error) {
+                statusDiv.innerHTML = `<span style="color: red">❌ ${error?.message || "Post failed."}</span>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Post Now';
+            }
+        });
+
+        async function schedulePost() {
+            const statusDiv = document.getElementById('status');
+            const scheduleBtn = document.getElementById('scheduleBtn');
+            const scheduleTime = document.getElementById('scheduleTime');
+            const textEl = document.querySelector('textarea[name="text"]');
+
+            const cookies = await getSession();
+            if (!cookies?.li_at || !cookies?.JSESSIONID) {
+                statusDiv.innerHTML = `<span style="color: red">❌ Not connected. Please connect LinkedIn first.</span>`;
+                return;
+            }
+
+            const text = String(textEl?.value || "").trim();
+            if (!text) {
+                statusDiv.innerHTML = `<span style="color: red">❌ Please enter some text.</span>`;
+                return;
+            }
+
+            const v = String(scheduleTime?.value || "").trim();
+            if (!v) {
+                statusDiv.innerHTML = `<span style="color: red">❌ Please select a schedule date/time.</span>`;
+                return;
+            }
+
+            // datetime-local is local time without timezone; convert to ISO for server.
+            const runAtIso = new Date(v).toISOString();
+
+            scheduleBtn.disabled = true;
+            scheduleBtn.textContent = "Scheduling...";
+            statusDiv.innerHTML = `<span style="color: #0077b5">Scheduling…</span>`;
+
+            try {
+                const resp = await fetch("/schedule-post", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ cookies, text, run_at: runAtIso }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data?.status !== "success") {
+                    throw new Error(data?.message || "Failed to schedule");
+                }
+                statusDiv.innerHTML = `<span style="color: green">✅ Scheduled for: ${data.run_at}</span>`;
+            } catch (e) {
+                statusDiv.innerHTML = `<span style="color: red">❌ ${e?.message || e}</span>`;
+            } finally {
+                scheduleBtn.disabled = false;
+                scheduleBtn.textContent = "Schedule Post";
+            }
+        }
+
+        document.getElementById("scheduleBtn").addEventListener("click", schedulePost);
+    </script>
+</body>
+
+</html>
