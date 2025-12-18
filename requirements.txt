@@ -1,0 +1,7 @@
+flask
+flask-cors
+requests
+playwright
+python-dotenv
+apscheduler
+gunicorn
