@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Outspark Admin Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet" />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Outfit", sans-serif;
+        background: radial-gradient(1200px 600px at 100% 0%, rgba(10, 102, 194, 0.22), transparent 60%),
+          radial-gradient(900px 600px at 0% 0%, rgba(255, 176, 32, 0.14), transparent 60%),
+          linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: #111;
+        padding: 24px;
+      }
+
+      .card {
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+        padding: 34px;
+        border-radius: 18px;
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.14);
+        width: 100%;
+        max-width: 420px;
+      }
+
+      h1 {
+        margin: 0 0 8px 0;
+        font-weight: 600;
+        color: #0b1220;
+        font-size: 24px;
+      }
+
+      p {
+        margin: 0 0 18px 0;
+        color: #4b5563;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+
+      label {
+        font-size: 12px;
+        color: #4b5563;
+        display: block;
+        margin: 12px 0 6px;
+      }
+
+      input {
+        width: 100%;
+        padding: 12px 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 12px;
+        font-family: inherit;
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+        background: #fff;
+      }
+
+      input:focus {
+        border-color: rgba(10, 102, 194, 0.6);
+        box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.12);
+      }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+        align-items: center;
+      }
+
+      .btn {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(10, 102, 194, 0.35);
+        background: linear-gradient(180deg, #0a66c2 0%, #004182 100%);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .btn:hover {
+        filter: brightness(1.04);
+      }
+
+      .err {
+        margin-top: 12px;
+        color: #dc2626;
+        font-size: 13px;
+        min-height: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Outspark Admin</h1>
+      <p>Login to connect LinkedIn and schedule posts.</p>
+
+      <form method="POST" action="/admin-login">
+        <label>Username</label>
+        <input name="username" placeholder="admin" autocomplete="username" />
+
+        <label>Password</label>
+        <input name="password" placeholder="(empty password allowed)" autocomplete="current-password" />
+
+        <div class="row">
+          <button class="btn" type="submit">Login</button>
+        </div>
+
+        <div class="err">{{ error or "" }}</div>
+      </form>
+    </div>
+  </body>
+</html>
+
+

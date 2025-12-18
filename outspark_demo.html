@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Outspark Demo</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Outfit', sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #333;
+      padding: 24px;
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      padding: 28px;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 680px;
+    }
+
+    h1 {
+      margin: 0 0 6px 0;
+      font-weight: 600;
+      color: #1a1a1a;
+      font-size: 24px;
+    }
+
+    p {
+      margin: 0 0 18px 0;
+      color: #666;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin: 14px 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 14px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background-color: #0077b5;
+      color: white;
+      box-shadow: 0 4px 15px rgba(0, 119, 181, 0.25);
+    }
+
+    .btn-primary:hover:enabled {
+      background-color: #006097;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid #ddd;
+      color: #333;
+    }
+
+    .btn-secondary:hover:enabled {
+      background: #f5f5f5;
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      padding: 14px;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+      box-sizing: border-box;
+      background: #fff;
+    }
+
+    textarea:focus {
+      outline: none;
+      border-color: #0077b5;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    .ok { color: #10b981; }
+    .err { color: #ef4444; }
+    .info { color: #3b82f6; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f3f4f6;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 13px;
+      color: #111827;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <h1>Outspark Demo Page</h1>
+    <p>
+      This page simulates Outspark: it requests LinkedIn cookies from the installed Chrome extension,
+      stores them in this website's IndexedDB, verifies them with the backend, and then creates posts by asking
+      the extension to run an in-page `fetch()` inside an existing LinkedIn tab (Voyager GraphQL).
+    </p>
+
+    <div class="row">
+      <button id="connectBtn" class="btn btn-primary">Connect with Extension</button>
+      <button id="clearBtn" class="btn btn-secondary">Clear IndexedDB Session</button>
+    </div>
+
+    <div id="connStatus" class="status"></div>
+    <div id="profileBadge" class="badge" style="display:none;"></div>
+
+    <hr style="border:none; border-top:1px solid #eee; margin:18px 0;">
+
+    <h1 style="font-size:18px; margin-top:0;">Create Post (from website)</h1>
+    <p style="margin-bottom:10px;">Enabled only after cookies are verified and stored in IndexedDB.</p>
+
+    <textarea id="postText" placeholder="What do you want to talk about?"></textarea>
+    <div class="row">
+      <button id="postBtn" class="btn btn-primary" disabled>Post to LinkedIn</button>
+    </div>
+    <div id="postStatus" class="status"></div>
+  </div>
+
+  <script>
+    // --- IndexedDB (website-side, like Outspark would do) ---
+    const DB_NAME = "OutsparkDB";
+    const DB_VERSION = 1;
+    const STORE_NAME = "session";
+    const COOKIE_KEY = "linkedin_cookies";
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (event) => {
+          const db = event.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error || new Error("Failed to open IndexedDB"));
+      });
+    }
+
+    async function idbPut(id, data) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction([STORE_NAME], "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.put({ id, data });
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error || new Error("IndexedDB put failed"));
+      });
+    }
+
+    async function idbGet(id) {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction([STORE_NAME], "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.get(id);
+        req.onsuccess = () => resolve(req.result ? req.result.data : null);
+        req.onerror = () => reject(req.error || new Error("IndexedDB get failed"));
+      });
+    }
+
+    async function idbClear() {
+      const db = await openDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction([STORE_NAME], "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error || new Error("IndexedDB clear failed"));
+      });
+    }
+
+    // --- Extension request (bridge.js replies) ---
+    function requestCookiesFromExtension(timeoutMs = 6000) {
+      return new Promise((resolve, reject) => {
+        const requestId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now());
+        let done = false;
+
+        const timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          window.removeEventListener("message", onMessage);
+          reject(new Error("No response from extension. Ensure it's installed + reloaded."));
+        }, timeoutMs);
+
+        function onMessage(event) {
+          const data = event.data || {};
+          if (data?.source !== "post-buddy-extension") return;
+          if (data?.type !== "OUTSPARK_LINKEDIN_COOKIES_RESULT" && data?.type !== "LINKEDIN_COOKIES_RESPONSE") return;
+          if (data?.requestId && data.requestId !== requestId) return;
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          if (!data.ok) reject(new Error(data.error || "Failed to get cookies"));
+          else resolve(data.cookies);
+        }
+
+        window.addEventListener("message", onMessage);
+
+        // Ask extension content-script (bridge.js) for cookies
+        window.postMessage(
+          { source: "outspark-page", type: "OUTSPARK_GET_LINKEDIN_COOKIES", requestId },
+          "*"
+        );
+      });
+    }
+
+    // --- Backend calls ---
+    async function verifyWithBackend(cookies) {
+      const resp = await fetch("/verify-cookies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cookies })
+      });
+      const data = await resp.json();
+      if (!resp.ok || data.status !== "success") {
+        throw new Error(data?.message || "Verification failed");
+      }
+      return data.profile || null;
+    }
+
+    // --- In-page posting via extension (safe approach) ---
+    function requestPostViaExtension(text, { visibility = "ANYONE", queryId } = {}, timeoutMs = 20000) {
+      return new Promise((resolve, reject) => {
+        const requestId = crypto?.randomUUID ? crypto.randomUUID() : String(Date.now());
+        let done = false;
+
+        const timer = setTimeout(() => {
+          if (done) return;
+          done = true;
+          window.removeEventListener("message", onMessage);
+          reject(new Error("No response from extension while posting. Ensure extension is installed + LinkedIn tab is logged in."));
+        }, timeoutMs);
+
+        function onMessage(event) {
+          const data = event.data || {};
+          if (data?.source !== "post-buddy-extension") return;
+          if (data?.type !== "OUTSPARK_CREATE_LINKEDIN_POST_RESULT") return;
+          if (data?.requestId && data.requestId !== requestId) return;
+          if (done) return;
+          done = true;
+          clearTimeout(timer);
+          window.removeEventListener("message", onMessage);
+          if (!data.ok) reject(new Error(data.error || "Failed to create post"));
+          else resolve(data);
+        }
+
+        window.addEventListener("message", onMessage);
+
+        window.postMessage(
+          { source: "outspark-page", type: "OUTSPARK_CREATE_LINKEDIN_POST", requestId, text, visibility, queryId },
+          "*"
+        );
+      });
+    }
+
+    // --- UI wiring ---
+    const connectBtn = document.getElementById("connectBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const postBtn = document.getElementById("postBtn");
+    const postText = document.getElementById("postText");
+    const connStatus = document.getElementById("connStatus");
+    const postStatus = document.getElementById("postStatus");
+    const profileBadge = document.getElementById("profileBadge");
+
+    function setConnStatus(text, cls) {
+      connStatus.textContent = text;
+      connStatus.className = `status ${cls || ""}`;
+    }
+
+    function setPostStatus(text, cls) {
+      postStatus.textContent = text;
+      postStatus.className = `status ${cls || ""}`;
+    }
+
+    function setProfile(profile) {
+      if (!profile) {
+        profileBadge.style.display = "none";
+        profileBadge.textContent = "";
+        return;
+      }
+      const name = `${profile.first_name || ""} ${profile.last_name || ""}`.trim() || "LinkedIn User";
+      profileBadge.style.display = "inline-flex";
+      profileBadge.textContent = `Connected as: ${name}`;
+    }
+
+    async function refreshState() {
+      const cookies = await idbGet(COOKIE_KEY);
+      if (cookies?.li_at && cookies?.JSESSIONID) {
+        setConnStatus("Session found in website IndexedDB. Ready to post.", "ok");
+        postBtn.disabled = false;
+      } else {
+        setConnStatus("Not connected. Click “Connect with Extension”.", "info");
+        postBtn.disabled = true;
+      }
+    }
+
+    connectBtn.addEventListener("click", async () => {
+      connectBtn.disabled = true;
+      setConnStatus("Requesting cookies from extension…", "info");
+      setPostStatus("", "");
+      setProfile(null);
+
+      try {
+        const cookies = await requestCookiesFromExtension();
+        setConnStatus("Verifying cookies with backend…", "info");
+        const profile = await verifyWithBackend(cookies);
+        await idbPut(COOKIE_KEY, cookies);
+        setProfile(profile);
+        setConnStatus("Connected. Cookies stored in website IndexedDB.", "ok");
+        postBtn.disabled = false;
+      } catch (e) {
+        setConnStatus(`Connect failed: ${e.message}`, "err");
+        postBtn.disabled = true;
+      } finally {
+        connectBtn.disabled = false;
+      }
+    });
+
+    clearBtn.addEventListener("click", async () => {
+      await idbClear();
+      setProfile(null);
+      setConnStatus("Cleared website IndexedDB session.", "info");
+      setPostStatus("", "");
+      postBtn.disabled = true;
+    });
+
+    postBtn.addEventListener("click", async () => {
+      const text = postText.value.trim();
+      if (!text) {
+        setPostStatus("Please enter some text.", "err");
+        return;
+      }
+
+      postBtn.disabled = true;
+      setPostStatus("Posting…", "info");
+      try {
+        const result = await requestPostViaExtension(text);
+        postText.value = "";
+        setPostStatus(result?.post_url ? `✅ Posted successfully: ${result.post_url}` : "✅ Posted successfully.", "ok");
+      } catch (e) {
+        setPostStatus(`❌ ${e.message}`, "err");
+      } finally {
+        postBtn.disabled = false;
+      }
+    });
+
+    window.addEventListener("load", refreshState);
+  </script>
+</body>
+
+</html>
+
+
